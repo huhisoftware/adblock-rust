@@ -1,0 +1,20 @@
+[package]
+name = "adblock-rs"
+version = "0.3.1"
+authors = ["Huy Nguyen <huynq.cntt@gmail.com>"]
+license = "MPL-2.0"
+build = "build.rs"
+exclude = ["artifacts.json", "index.node"]
+
+[lib]
+name = "adblock_rs"
+crate-type = ["cdylib"]
+
+[build-dependencies]
+neon-build = "0.3.3"
+
+[dependencies]
+neon-serde = "0.3"
+serde =  { version = "1.0", features = ["derive", "rc"] }
+adblock = { path = "../", default-features = false, features = ["css-validation", "embedded-domain-resolver"] }
+neon = "0.3.3"

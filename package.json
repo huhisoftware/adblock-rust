@@ -1,0 +1,33 @@
+{
+  "name": "adblock-rs",
+  "version": "0.3.1",
+  "description": "Very fast, Rust-based, native implementation of ad-blocker engine for Node",
+  "keywords": [
+    "adblock",
+    "adblocker",
+    "adblocking",
+    "ad",
+    "ads",
+    "block",
+    "blocker",
+    "blocking",
+    "rust"
+  ],
+  "main": "native/index.js",
+  "author": "Huy Nguyen <huynq.cntt@gmail.com>",
+  "contributors": [
+    "Huy Nguyen <huynq.cntt@gmail.com>"
+  ],
+  "license": "MPL-2.0",
+  "homepage": "https://github.com/huhisoftware/adblock-rust#readme",
+  "bugs": {
+    "url": "https://github.com/huhisoftware/adblock-rust/issues"
+  },
+  "repository": "https://github.com/huhisoftware/adblock-rust.git",
+  "dependencies": {
+    "neon-cli": "0.4.0"
+  },
+  "scripts": {
+    "install": "neon build --release"
+  }
+}

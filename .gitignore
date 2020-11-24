@@ -1,0 +1,15 @@
+/target
+**/*.rs.bk
+.vscode/
+.DS_Store
+project.code-workspace
+native/target
+native/index.node
+native/artifacts.json
+**/*~
+**/node_modules
+**/.DS_Store
+**/target/
+ignored/
+NDK/
+.cargo

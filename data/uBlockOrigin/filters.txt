@@ -4651,7 +4651,7 @@ bilasport.com##+js(popads-dummy.js)
 
 ! https://github.com/uBlockOrigin/uAssets/issues/1234
 ! https://www.reddit.com/r/uBlockOrigin/comments/8ikcyk/new_ads_in_httpsanimeflvnet/
-animeflv.net##+js(abort-on-property-read.js, BBRaven)
+animeflv.net##+js(abort-on-property-read.js, BHUhin)
 animeflv.net##+js(set-constant.js, loadingAds, true)
 animeflv.net##a[href*="watch?key"]
 ||ssraju3n.com^

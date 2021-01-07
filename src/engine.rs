@@ -1,11 +1,12 @@
-
 use crate::blocker::{Blocker, BlockerError, BlockerOptions, BlockerResult};
 use crate::cosmetic_filter_cache::{CosmeticFilterCache, UrlSpecificResources};
 use crate::lists::{FilterFormat, FilterSet};
 use crate::request::Request;
 use crate::resources::{Resource, RedirectResource};
+
 use std::collections::HashSet;
 
+/// Main adblocking engine that allows efficient querying of resources to block.
 pub struct Engine {
     pub blocker: Blocker,
     cosmetic_cache: CosmeticFilterCache,
@@ -244,13 +245,13 @@ mod tests {
             String::from("adv$tag=stuff"),
             String::from("somelongpath/test$tag=stuff"),
             String::from("||brianbondy.com/$tag=brian"),
-            String::from("||huhisoft.com$tag=brian"),
+            String::from("||hnq.vn$tag=brian"),
         ];
         let url_results = vec![
             ("http://example.com/advert.html", true),
             ("http://example.com/somelongpath/test/2.html", true),
             ("https://brianbondy.com/about", true),
-            ("https://huhisoft.com/about", true),
+            ("https://hnq.vn/about", true),
         ];
 
         let mut engine = Engine::from_rules(&filters, FilterFormat::Standard);
@@ -273,13 +274,13 @@ mod tests {
             String::from("adv$tag=stuff"),
             String::from("somelongpath/test$tag=stuff"),
             String::from("||brianbondy.com/$tag=brian"),
-            String::from("||huhisoft.com$tag=brian"),
+            String::from("||hnq.vn$tag=brian"),
         ];
         let url_results = vec![
             ("http://example.com/advert.html", false),
             ("http://example.com/somelongpath/test/2.html", false),
             ("https://brianbondy.com/about", true),
-            ("https://huhisoft.com/about", true),
+            ("https://hnq.vn/about", true),
         ];
 
         let mut engine = Engine::from_rules(&filters, FilterFormat::Standard);
@@ -353,13 +354,13 @@ mod tests {
             String::from("adv$tag=stuff"),
             String::from("somelongpath/test$tag=stuff"),
             String::from("||brianbondy.com/$tag=brian"),
-            String::from("||huhisoft.com$tag=brian"),
+            String::from("||hnq.vn$tag=brian"),
         ];
         let url_results = vec![
             ("http://example.com/advert.html", true),
             ("http://example.com/somelongpath/test/2.html", true),
             ("https://brianbondy.com/about", false),
-            ("https://huhisoft.com/about", false),
+            ("https://hnq.vn/about", false),
         ];
 
         let mut engine = Engine::from_rules(&filters, FilterFormat::Standard);

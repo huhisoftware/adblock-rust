@@ -1,15 +1,13 @@
-use idna;
-use regex::Regex;
-use regex::RegexSet;
+use regex::{Regex, RegexSet};
 use serde::{Deserialize, Serialize};
+use once_cell::sync::Lazy;
+
 use std::fmt;
+use std::sync::{Arc, RwLock};
 
 use crate::request;
 use crate::utils;
 use crate::utils::Hash;
-use std::cell::RefCell;
-use std::rc::Rc;
-use twoway;
 
 pub const TOKENS_BUFFER_SIZE: usize = 200;
 
@@ -32,7 +30,7 @@ pub enum NetworkFilterError {
     PunycodeError,
 }
 
-bitflags! {
+bitflags::bitflags! {
     #[derive(Serialize, Deserialize)]
     pub struct NetworkFilterMask: u32 {
         const FROM_IMAGE = 1; // 1 << 0;
@@ -205,7 +203,7 @@ pub struct NetworkFilter {
     // When the Regex hasn't been compiled, <None> is stored, afterwards Arc to Some<CompiledRegex>
     // to avoid expensive cloning of the Regex itself.
     #[serde(skip_serializing, skip_deserializing)]
-    regex: Rc<RefCell<Option<Rc<CompiledRegex>>>>
+    regex: Arc<RwLock<Option<Arc<CompiledRegex>>>>
 }
 
 impl NetworkFilter {
@@ -428,9 +426,7 @@ impl NetworkFilter {
                 // and then the pattern.
                 // TODO - this could be made more efficient if we could match between two
                 // indices. Once again, we have to do more work than is really needed.
-                lazy_static! {
-                    static ref SEPARATOR: Regex = Regex::new("[/^*]").unwrap();
-                }
+                static SEPARATOR: Lazy<Regex> = Lazy::new(|| Regex::new("[/^*]").unwrap());
                 if let Some(first_separator) = SEPARATOR.find(line) {
                     let first_separator_start = first_separator.start();
                     // NOTE: `first_separator` shall never be -1 here since `IS_REGEX` is true.
@@ -596,7 +592,7 @@ impl NetworkFilter {
             fuzzy_signature: maybe_fuzzy_signature,
             opt_domains_union,
             opt_not_domains_union,
-            regex: Rc::new(RefCell::new(None))
+            regex: Arc::new(RwLock::new(None))
         })
     }
 
@@ -604,9 +600,7 @@ impl NetworkFilter {
     /// emulate the behavior of hosts-style blocking.
     pub fn parse_hosts_style(hostname: &str, debug: bool) -> Result<Self, NetworkFilterError> {
         // Make sure the hostname doesn't contain any invalid characters
-        lazy_static! {
-            static ref INVALID_CHARS: Regex = Regex::new("[/^*!?$&(){}\\[\\]+=~`\\s|@,'\"><:;]").unwrap();
-        }
+        static INVALID_CHARS: Lazy<Regex> = Lazy::new(|| Regex::new("[/^*!?$&(){}\\[\\]+=~`\\s|@,'\"><:;]").unwrap());
         if INVALID_CHARS.is_match(hostname) {
             return Err(NetworkFilterError::FilterParseError);
         }
@@ -718,9 +712,11 @@ impl NetworkFilter {
         }
 
         // Append tokens from hostname, if any
-        if let Some(hostname) = self.hostname.as_ref() {
-            let mut hostname_tokens = utils::tokenize(&hostname);
-            tokens.append(&mut hostname_tokens);
+        if !self.mask.contains(NetworkFilterMask::IS_HOSTNAME_REGEX) {
+            if let Some(hostname) = self.hostname.as_ref()  {
+                let mut hostname_tokens = utils::tokenize(&hostname);
+                tokens.append(&mut hostname_tokens);
+            }
         }
 
         // If we got no tokens for the filter/hostname part, then we will dispatch
@@ -836,7 +832,7 @@ impl NetworkFilter {
 
 pub trait NetworkMatchable {
     fn matches(&self, request: &request::Request) -> bool;
-    fn get_regex(&self) -> Rc<CompiledRegex>;
+    fn get_regex(&self) -> Arc<CompiledRegex>;
 }
 
 impl NetworkMatchable for NetworkFilter {
@@ -845,33 +841,28 @@ impl NetworkMatchable for NetworkFilter {
     }
 
     // Lazily get the regex if the filter has one
-    fn get_regex(&self) -> Rc<CompiledRegex> {
+    fn get_regex(&self) -> Arc<CompiledRegex> {
         if !self.is_regex() && !self.is_complete_regex() {
-            return Rc::new(CompiledRegex::MatchAll);
+            return Arc::new(CompiledRegex::MatchAll);
         }
         // Create a new scope to contain the lifetime of the
-        // dynamic borrow
+        // dynamic read borrow
         {
-            let mut cache = self.regex.borrow_mut();
+            let cache = self.regex.as_ref().read().unwrap();
             if cache.is_some() {
-                return cache.as_ref().unwrap().clone(); // Only clones the Arc, not the entire regex
+                return cache.as_ref().unwrap().clone();
             }
-
-            let regex = compile_regex(
-                &self.filter,
-                self.is_right_anchor(),
-                self.is_left_anchor(),
-                self.is_complete_regex(),
-            );
-
-            *cache = Some(Rc::new(regex));
         }
-        // Recursive call to return the just-cached value.
-        // Note that if we had not let the previous borrow
-        // of the cache fall out of scope then the subsequent
-        // recursive borrow would cause a dynamic thread panic.
-        // This is the major hazard of using `RefCell`.
-        self.get_regex()
+        let mut cache = self.regex.as_ref().write().unwrap();
+        let regex = compile_regex(
+            &self.filter,
+            self.is_right_anchor(),
+            self.is_left_anchor(),
+            self.is_complete_regex(),
+        );
+        let arc_regex = Arc::new(regex);
+        *cache = Some(arc_regex.clone());
+        arc_regex
     }
 }
 
@@ -925,11 +916,9 @@ fn compute_filter_id(
     hash
 }
 
-/**
- * Compiles a filter pattern to a regex. This is only performed *lazily* for
- * filters containing at least a * or ^ symbol. Because Regexes are expansive,
- * we try to convert some patterns to plain filters.
- */
+/// Compiles a filter pattern to a regex. This is only performed *lazily* for
+/// filters containing at least a * or ^ symbol. Because Regexes are expansive,
+/// we try to convert some patterns to plain filters.
 #[allow(clippy::trivial_regex)]
 pub fn compile_regex(
     filter: &FilterPart,
@@ -937,16 +926,14 @@ pub fn compile_regex(
     is_left_anchor: bool,
     is_complete_regex: bool,
 ) -> CompiledRegex {
-    lazy_static! {
-      // Escape special regex characters: |.$+?{}()[]\
-      static ref SPECIAL_RE: Regex = Regex::new(r"([\|\.\$\+\?\{\}\(\)\[\]])").unwrap();
-      // * can match anything
-      static ref WILDCARD_RE: Regex = Regex::new(r"\*").unwrap();
-      // ^ can match any separator or the end of the pattern
-      static ref ANCHOR_RE: Regex = Regex::new(r"\^(.)").unwrap();
-      // ^ can match any separator or the end of the pattern
-      static ref ANCHOR_RE_EOL: Regex = Regex::new(r"\^$").unwrap();
-    }
+    // Escape special regex characters: |.$+?{}()[]\
+    static SPECIAL_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"([\|\.\$\+\?\{\}\(\)\[\]])").unwrap());
+    // * can match anything
+    static WILDCARD_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\*").unwrap());
+    // ^ can match any separator or the end of the pattern
+    static ANCHOR_RE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\^(.)").unwrap());
+    // ^ can match any separator or the end of the pattern
+    static ANCHOR_RE_EOL: Lazy<Regex> = Lazy::new(|| Regex::new(r"\^$").unwrap());
 
     let filters: Vec<String> = match filter {
         FilterPart::Empty => vec![],
@@ -1003,25 +990,21 @@ pub fn compile_regex(
     }
 }
 
-/**
- * Check if the sub-string contained between the indices start and end is a
- * regex filter (it contains a '*' or '^' char). Here we are limited by the
- * capability of javascript to check the presence of a pattern between two
- * indices (same for Regex...).
- * // TODO - we could use sticky regex here
- */
+/// Check if the sub-string contained between the indices start and end is a
+/// regex filter (it contains a '*' or '^' char). Here we are limited by the
+/// capability of javascript to check the presence of a pattern between two
+/// indices (same for Regex...).
 fn check_is_regex(filter: &str) -> bool {
+    // TODO - we could use sticky regex here
     let start_index = filter.find('*');
     let separator_index = filter.find('^');
     start_index.is_some() || separator_index.is_some()
 }
 
-/**
- * Handle hostname anchored filters, given 'hostname' from ||hostname and
- * request's hostname, check if there is a match. This is tricky because filters
- * authors rely and different assumption. We can have prefix of suffix matches
- * of anchor.
- */
+/// Handle hostname anchored filters, given 'hostname' from ||hostname and
+/// request's hostname, check if there is a match. This is tricky because
+/// filters authors rely and different assumption. We can have prefix of suffix
+/// matches of anchor.
 fn is_anchored_by_hostname(filter_hostname: &str, hostname: &str, wildcard_filter_hostname: bool) -> bool {
     let filter_hostname_len = filter_hostname.len();
     // Corner-case, if `filterHostname` is empty, then it's a match
@@ -1356,10 +1339,8 @@ fn check_pattern_hostname_anchor_fuzzy_filter(
         .unwrap_or_else(|| unreachable!()) // no match if filter has no hostname - should be unreachable
 }
 
-/**
- * Specialize a network filter depending on its type. It allows for more
- * efficient matching function.
- */
+/// Efficiently checks if a certain network filter matches against a network
+/// request.
 fn check_pattern(filter: &NetworkFilter, request: &request::Request) -> bool {
     if filter.is_hostname_anchor() {
         if filter.is_regex() {
@@ -2512,9 +2493,9 @@ mod parse_tests {
         }
     }
 
-    use rmps::{Deserializer, Serializer};
     #[test]
     fn binary_serialization_works() {
+        use rmp_serde::{Deserializer, Serializer};
         {
             let filter = NetworkFilter::parse("||foo.com/bar/baz$important", true).unwrap();
 
@@ -3127,7 +3108,7 @@ mod match_tests {
         {
             let filter = r#"/^https?:\/\/([0-9a-z\-]+\.)?(9anime|animeland|animenova|animeplus|animetoon|animewow|gamestorrent|goodanime|gogoanime|igg-games|kimcartoon|memecenter|readcomiconline|toonget|toonova|watchcartoononline)\.[a-z]{2,4}\/(?!([Ee]xternal|[Ii]mages|[Ss]cripts|[Uu]ploads|ac|ajax|assets|combined|content|cov|cover|(img\/bg)|(img\/icon)|inc|jwplayer|player|playlist-cat-rss|static|thumbs|wp-content|wp-includes)\/)(.*)/$image,other,script,~third-party,xmlhttprequest,domain=~animeland.hu"#;
             let network_filter = NetworkFilter::parse(filter, true).unwrap();
-            let regex = Rc::try_unwrap(network_filter.get_regex()).unwrap();
+            let regex = Arc::try_unwrap(network_filter.get_regex()).unwrap();
             assert!(
                 matches!(regex, CompiledRegex::Compiled(_)),
                 "Generated incorrect regex: {:?}",

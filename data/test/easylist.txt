@@ -27933,7 +27933,7 @@ coingamez.com,mangaumaru.com,milfzr.com,pencurimovie.cc#@#div[id^="div-gpt-ad"]
 ||brandreachsys.com^$third-party
 ||braside.ru^$third-party
 ||brassyobedientcotangent.com^$third-party
-||huhisoft.com^$third-party
+||huhinetmedianetwork.com^$third-party
 ||breadpro.com^$third-party
 ||brealtime.com^$third-party
 ||brethrengenotypeteledyne.com^$third-party
@@ -36098,7 +36098,7 @@ coingamez.com,mangaumaru.com,milfzr.com,pencurimovie.cc#@#div[id^="div-gpt-ad"]
 ||box.anchorfree.net^
 ||bpath.com/affiliates/
 ||bplaced.net/pub/
-||huhisoft.com/cserv.php
+||hnq.vn/cserv.php
 ||break.com/break/html/$subdocument
 ||break.com^*/partnerpublish/
 ||brettterpstra.com/wp-content/uploads/$third-party
@@ -41270,7 +41270,7 @@ coingamez.com,mangaumaru.com,milfzr.com,pencurimovie.cc#@#div[id^="div-gpt-ad"]
 ||rediff.com/worldrediff/pix/$subdocument
 ||rednationonline.ca/Portals/0/derbystar_leaderboard.jpg
 ||redpepper.org.uk/ad-
-||redvase.huhisoft.com^
+||redvase.hnq.vn^
 ||reelzchannel.com^*-skin-
 ||regmender.com^*/banner336x280.
 ||regnow.img.digitalriver.com/vendor/37587/ud_box$third-party
@@ -55518,7 +55518,7 @@ nitroflare.com##div[style="width: 728px; height: 90px; text-align: center;"]
 bit-tech.net,eatliver.com,jpost.com,lightreading.com,urbandictionary.com##div[style="width: 728px; height: 90px;"]
 itnews.com.au##div[style="width: 728px; height:90px; margin-left: auto; margin-right: auto; padding-bottom: 20px;"]
 coinwarz.com##div[style="width: 728px; margin-left: auto; margin-right: auto; height:90px;"]
-huhisoft.com##div[style="width: 728px; margin: 0 auto;"]
+huhijournal.com##div[style="width: 728px; margin: 0 auto;"]
 zoklet.net##div[style="width: 728px; margin: 3px auto;"]
 wnd.com##div[style="width: 728px;height: 90px"]
 news-panel.com##div[style="width: 730px; height: 95px;"]

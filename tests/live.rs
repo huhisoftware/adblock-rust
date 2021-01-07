@@ -1,16 +1,11 @@
-extern crate adblock;
-extern crate reqwest;
-
 use adblock::engine::Engine;
 use adblock::resources::resource_assembler::assemble_web_accessible_resources;
 
-use serde::{Deserialize};
-use std::fs::File;
-use std::io::BufReader;
-
+use serde::Deserialize;
 use tokio::runtime::Runtime;
 
-use csv;
+use std::fs::File;
+use std::io::BufReader;
 
 #[allow(non_snake_case)]
 #[derive(Debug, Deserialize)]
@@ -59,7 +54,7 @@ pub struct RemoteFilterSource {
 pub async fn get_all_filters() -> adblock::lists::FilterSet {
     use futures::FutureExt;
 
-    const DEFAULT_LISTS_URL: &'static str = "https://raw.githubusercontent.com/huhisoftware/adblock-resources/master/filter_lists/default.json";
+    const DEFAULT_LISTS_URL: &'static str = "https://raw.githubusercontent.com/huhi/adblock-resources/master/filter_lists/default.json";
 
     let default_lists: Vec<RemoteFilterSource> = async {
         let body = reqwest::get(DEFAULT_LISTS_URL).await.unwrap().text().await.unwrap();

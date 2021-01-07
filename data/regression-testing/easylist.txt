@@ -17609,8 +17609,8 @@ takeover_banner_
 ||brasileirinhas.com.br/banners/
 ||brassrule.com^$third-party
 ||brassyobedientcotangent.com^$third-party
-||huhisoft.com/cserv.php
-||huhisoft.com^$third-party
+||hnq.vn/cserv.php
+||huhinetmedianetwork.com^$third-party
 ||bravome.pro^$third-party
 ||bravotube.net/cc/
 ||bravotube.net/dd$subdocument
@@ -31790,7 +31790,7 @@ takeover_banner_
 ||redtubefiles.com^*/banner/
 ||redtubefiles.com^*/skins/
 ||reduxmediagroup.com^$third-party
-||redvase.huhisoft.com^
+||redvase.hnq.vn^
 ||redxxx.mobi^$third-party
 ||redzxxxtube.com^$third-party
 ||reebinbxhlva.com^$third-party

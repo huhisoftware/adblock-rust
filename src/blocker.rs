@@ -1,7 +1,9 @@
-use hashbrown::HashMap;
-use std::sync::Arc;
+//! Holds `Blocker`, which handles all network-based adblocking queries.
+
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::sync::Arc;
+use std::collections::{HashMap, HashSet};
 use std::iter::FromIterator;
 
 #[cfg(feature = "object-pooling")]
@@ -97,6 +99,7 @@ impl Default for TokenPool {
     }
 }
 
+/// Stores network filters for efficient querying.
 pub struct Blocker {
     pub(crate) csp: NetworkFilterList,
     pub(crate) exceptions: NetworkFilterList,
@@ -124,10 +127,8 @@ pub struct Blocker {
 }
 
 impl Blocker {
-    /**
-     * Decide if a network request (usually from WebRequest API) should be
-     * blocked, redirected or allowed.
-     */
+    /// Decide if a network request (usually from WebRequest API) should be
+    /// blocked, redirected or allowed.
     pub fn check(&self, request: &Request) -> BlockerResult {
         self.check_parameterised(request, false, false)
     }
@@ -152,11 +153,9 @@ impl Blocker {
             return BlockerResult::default();
         }
 
-        lazy_static! {
-            // only check for tags in tagged and exception rule buckets,
-            // pass empty set for the rest
-            static ref NO_TAGS: HashSet<String> = HashSet::new();
-        }
+        // only check for tags in tagged and exception rule buckets,
+        // pass empty set for the rest
+        static NO_TAGS: Lazy<HashSet<String>> = Lazy::new(HashSet::new);
 
         let mut request_tokens;
         #[cfg(feature = "object-pooling")]
@@ -261,10 +260,8 @@ impl Blocker {
         }
     }
 
-    /**
-     * Given a "main_frame" request, check if some content security policies
-     * should be injected in the page.
-     */
+    /// Given a "main_frame" request, check if some content security policies
+    /// should be injected in the page.
     pub fn get_csp_directives(&self, _request: Request) -> Option<String> {
         unimplemented!()
     }
@@ -312,6 +309,13 @@ impl Blocker {
                 } else if filter.is_exception() {
                     exceptions.push(filter);
                 } else if filter.is_important() {
+                    // Add `$important,redirect` filters twice for temporary compatibility while
+                    // fixing #131
+                    if filter.is_redirect() {
+                        let mut filter = filter.clone();
+                        filter.mask.set(crate::filters::network::NetworkFilterMask::IS_IMPORTANT, false);
+                        redirects.push(filter);
+                    }
                     importants.push(filter);
                 } else if filter.is_redirect() {
                     redirects.push(filter);
@@ -1160,6 +1164,37 @@ mod blocker_tests {
         test_requests_filters(&filters, &request_expectations);
     }
 
+    #[test]
+    fn hostname_regex_filter_works() {
+        let filters = vec![
+            String::from("||alimc*.top^$domain=letv.com"),
+            String::from("||aa*.top^$domain=letv.com")
+        ];
+        let url_results = vec![
+            (Request::from_urls("https://r.alimc1.top/test.js", "https://minisite.letv.com/", "script").unwrap(), true),
+            (Request::from_urls("https://www.baidu.com/test.js", "https://minisite.letv.com/", "script").unwrap(), false),
+            (Request::from_urls("https://r.aabb.top/test.js", "https://example.com/", "script").unwrap(), false),
+            (Request::from_urls("https://r.aabb.top/test.js", "https://minisite.letv.com/", "script").unwrap(), true),
+        ];
+
+        let (network_filters, _) = parse_filters(&filters, true, FilterFormat::Standard);
+
+        let blocker_options: BlockerOptions = BlockerOptions {
+            enable_optimizations: false,    // optimizations will reduce number of rules
+        };
+
+        let blocker = Blocker::new(network_filters, &blocker_options);
+
+        url_results.into_iter().for_each(|(req, expected_result)| {
+            let matched_rule = blocker.check(&req);
+            if expected_result {
+                assert!(matched_rule.matched, "Expected match for {}", req.url);
+            } else {
+                assert!(!matched_rule.matched, "Expected no match for {}, matched with {:?}", req.url, matched_rule.filter);
+            }
+        });
+    }
+
 
     #[test]
     fn tags_enable_works() {
@@ -1167,13 +1202,13 @@ mod blocker_tests {
             String::from("adv$tag=stuff"),
             String::from("somelongpath/test$tag=stuff"),
             String::from("||brianbondy.com/$tag=brian"),
-            String::from("||huhisoft.com$tag=brian"),
+            String::from("||hnq.vn$tag=brian"),
         ];
         let url_results = vec![
             (Request::from_url("http://example.com/advert.html").unwrap(), true),
             (Request::from_url("http://example.com/somelongpath/test/2.html").unwrap(), true),
             (Request::from_url("https://brianbondy.com/about").unwrap(), false),
-            (Request::from_url("https://huhisoft.com/about").unwrap(), false),
+            (Request::from_url("https://hnq.vn/about").unwrap(), false),
         ];
 
         let (network_filters, _) = parse_filters(&filters, true, FilterFormat::Standard);
@@ -1203,13 +1238,13 @@ mod blocker_tests {
             String::from("adv$tag=stuff"),
             String::from("somelongpath/test$tag=stuff"),
             String::from("||brianbondy.com/$tag=brian"),
-            String::from("||huhisoft.com$tag=brian"),
+            String::from("||hnq.vn$tag=brian"),
         ];
         let url_results = vec![
             (Request::from_url("http://example.com/advert.html").unwrap(), true),
             (Request::from_url("http://example.com/somelongpath/test/2.html").unwrap(), true),
             (Request::from_url("https://brianbondy.com/about").unwrap(), true),
-            (Request::from_url("https://huhisoft.com/about").unwrap(), true),
+            (Request::from_url("https://hnq.vn/about").unwrap(), true),
         ];
 
         let (network_filters, _) = parse_filters(&filters, true, FilterFormat::Standard);
@@ -1240,13 +1275,13 @@ mod blocker_tests {
             String::from("adv$tag=stuff"),
             String::from("somelongpath/test$tag=stuff"),
             String::from("||brianbondy.com/$tag=brian"),
-            String::from("||huhisoft.com$tag=brian"),
+            String::from("||hnq.vn$tag=brian"),
         ];
         let url_results = vec![
             (Request::from_url("http://example.com/advert.html").unwrap(), false),
             (Request::from_url("http://example.com/somelongpath/test/2.html").unwrap(), false),
             (Request::from_url("https://brianbondy.com/about").unwrap(), true),
-            (Request::from_url("https://huhisoft.com/about").unwrap(), true),
+            (Request::from_url("https://hnq.vn/about").unwrap(), true),
         ];
 
         let (network_filters, _) = parse_filters(&filters, true, FilterFormat::Standard);
@@ -1333,13 +1368,13 @@ mod blocker_tests {
         blocker.add_filter(NetworkFilter::parse("adv$tag=stuff", true).unwrap()).unwrap();
         blocker.add_filter(NetworkFilter::parse("somelongpath/test$tag=stuff", true).unwrap()).unwrap();
         blocker.add_filter(NetworkFilter::parse("||brianbondy.com/$tag=brian", true).unwrap()).unwrap();
-        blocker.add_filter(NetworkFilter::parse("||huhisoft.com$tag=brian", true).unwrap()).unwrap();
+        blocker.add_filter(NetworkFilter::parse("||hnq.vn$tag=brian", true).unwrap()).unwrap();
 
         let url_results = vec![
             (Request::from_url("http://example.com/advert.html").unwrap(), false),
             (Request::from_url("http://example.com/somelongpath/test/2.html").unwrap(), false),
             (Request::from_url("https://brianbondy.com/about").unwrap(), true),
-            (Request::from_url("https://huhisoft.com/about").unwrap(), true),
+            (Request::from_url("https://hnq.vn/about").unwrap(), true),
         ];
 
         url_results.into_iter().for_each(|(req, expected_result)| {

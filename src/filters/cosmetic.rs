@@ -1,10 +1,11 @@
 //! Tools for blocking at a page-content level, including CSS selector-based filtering and content
 //! script injection.
-use serde::{Deserialize, Serialize};
-use crate::utils::{ Hash };
 
+use once_cell::sync::Lazy;
 use regex::Regex;
-use lazy_static::lazy_static;
+use serde::{Deserialize, Serialize};
+
+use crate::utils::Hash;
 
 use css_validation::{is_valid_css_selector, is_valid_css_style};
 
@@ -23,7 +24,7 @@ pub enum CosmeticFilterError {
     EmptyRule,
 }
 
-bitflags! {
+bitflags::bitflags! {
     /// Boolean flags for cosmetic filter rules.
     #[derive(Serialize, Deserialize)]
     pub struct CosmeticFilterMask: u8 {
@@ -53,7 +54,43 @@ pub struct CosmeticFilter {
     pub style: Option<String>,
 }
 
+pub enum CosmeticFilterLocationType {
+    Entity,
+    NotEntity,
+    Hostname,
+    NotHostname,
+}
+
 impl CosmeticFilter {
+    #[inline]
+    pub fn locations_before_sharp<'a>(line: &'a str, sharp_index: usize) -> impl Iterator<Item=(CosmeticFilterLocationType, &'a str)> {
+        line[0..sharp_index].split(',').filter_map(|part| {
+            if part.is_empty() {
+                return None;
+            }
+            let hostname = part;
+            let negation = hostname.starts_with('~');
+            let entity = hostname.ends_with(".*");
+            let start = if negation {
+                1
+            } else {
+                0
+            };
+            let end = if entity {
+                hostname.len() - 2
+            } else {
+                hostname.len()
+            };
+            let location = &hostname[start..end];
+            Some(match (negation, entity) {
+                (true, true) => (CosmeticFilterLocationType::NotEntity, location),
+                (true, false) => (CosmeticFilterLocationType::NotHostname, location),
+                (false, true) => (CosmeticFilterLocationType::Entity, location),
+                (false, false) => (CosmeticFilterLocationType::Hostname, location),
+            })
+        })
+    }
+
     /// Parses the contents of a cosmetic filter rule up to the `##` or `#@#` separator.
     ///
     /// On success, returns `Vec`s of hashes of all of the following comma separated items that
@@ -80,38 +117,25 @@ impl CosmeticFilter {
         let mut hostnames_vec = vec![];
         let mut not_hostnames_vec = vec![];
 
-        let parts = line[0..sharp_index].split(',');
-        for part in parts {
+        for (location_type, location) in Self::locations_before_sharp(line, sharp_index) {
             let mut hostname = String::new();
-            if part.is_ascii() {
-                hostname.push_str(&part);
+            if location.is_ascii() {
+                hostname.push_str(location);
             } else {
                 *mask |= CosmeticFilterMask::IS_UNICODE;
-                match idna::domain_to_ascii(&part) {
+                match idna::domain_to_ascii(location) {
                     Ok(x) => hostname.push_str(&x),
                     Err(_) => return Err(CosmeticFilterError::PunycodeError),
                 }
             }
-            let negation = hostname.starts_with('~');
-            let entity = hostname.ends_with(".*");
-            let start = if negation {
-                1
-            } else {
-                0
-            };
-            let end = if entity {
-                hostname.len() - 2
-            } else {
-                hostname.len()
-            };
-            let hash = crate::utils::fast_hash(&hostname[start..end]);
-            match (negation, entity) {
-                (true, true) => not_entities_vec.push(hash),
-                (true, false) => not_hostnames_vec.push(hash),
-                (false, true) => entities_vec.push(hash),
-                (false, false) => hostnames_vec.push(hash),
+            let hash = crate::utils::fast_hash(&hostname);
+            match location_type {
+                CosmeticFilterLocationType::NotEntity => not_entities_vec.push(hash),
+                CosmeticFilterLocationType::NotHostname => not_hostnames_vec.push(hash),
+                CosmeticFilterLocationType::Entity => entities_vec.push(hash),
+                CosmeticFilterLocationType::Hostname => hostnames_vec.push(hash),
             }
-        };
+        }
 
         /// Sorts `vec` and wraps it in `Some` if it's not empty, or returns `None` if it is.
         #[inline]
@@ -499,11 +523,9 @@ mod css_validation {
     }
 }
 
-lazy_static! {
-    static ref RE_PLAIN_SELECTOR: Regex = Regex::new(r"^[#.][\w\\-]+").unwrap();
-    static ref RE_PLAIN_SELECTOR_ESCAPED: Regex = Regex::new(r"^[#.](?:\\[0-9A-Fa-f]+ |\\.|\w|-)+").unwrap();
-    static ref RE_ESCAPE_SEQUENCE: Regex = Regex::new(r"\\([0-9A-Fa-f]+ |.)").unwrap();
-}
+static RE_PLAIN_SELECTOR: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[#.][\w\\-]+").unwrap());
+static RE_PLAIN_SELECTOR_ESCAPED: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[#.](?:\\[0-9A-Fa-f]+ |\\.|\w|-)+").unwrap());
+static RE_ESCAPE_SEQUENCE: Lazy<Regex> = Lazy::new(|| Regex::new(r"\\([0-9A-Fa-f]+ |.)").unwrap());
 
 /// Returns the first token of a CSS selector.
 ///

@@ -9064,7 +9064,7 @@ _mongo_stats/
 ||branch.io^*_fingerprint_id=$third-party
 ||brandaffinity.net/icetrack/
 ||brandcdn.com/pixel/
-||huhisoft.com/counter/
+||hnq.vn/counter/
 ||break.com/apextracker/
 ||break.com/break/js/brktrkr.js$third-party
 ||breakingburner.com/stats.html?
@@ -11702,7 +11702,7 @@ _mongo_stats/
 ||analytics.adfreetime.com^
 ||analytics.archive.org^
 ||analytics.bloomberg.com^
-||analytics.huhisoft.com^
+||analytics.hnq.vn^
 ||analytics.ecosia.org^
 ||analytics.eip.telegraph.co.uk^
 ||analytics.femalefirst.co.uk^

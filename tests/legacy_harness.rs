@@ -1,5 +1,3 @@
-extern crate adblock;
-
 mod legacy_test_filters {
     use adblock::filters::network::NetworkFilter;
     use adblock::filters::network::NetworkMatchable;
@@ -430,7 +428,7 @@ mod legacy_check_match {
                 "adv$tag=stuff",
                 "somelongpath/test$tag=stuff",
                 "||brianbondy.com/$tag=brian",
-                "||huhisoft.com$tag=brian",
+                "||hnq.vn$tag=brian",
             ],
             FilterFormat::Standard,
             &[],
@@ -438,7 +436,7 @@ mod legacy_check_match {
                 "http://example.com/advert.html",
                 "http://example.com/somelongpath/test/2.html",
                 "https://brianbondy.com/about",
-                "https://huhisoft.com/about",
+                "https://hnq.vn/about",
             ],
             &[],
         );
@@ -448,14 +446,14 @@ mod legacy_check_match {
                 "adv$tag=stuff",
                 "somelongpath/test$tag=stuff",
                 "||brianbondy.com/$tag=brian",
-                "||huhisoft.com$tag=brian",
+                "||hnq.vn$tag=brian",
             ],
             FilterFormat::Standard,
             &[
                 "http://example.com/advert.html",
                 "http://example.com/somelongpath/test/2.html",
                 "https://brianbondy.com/about",
-                "https://huhisoft.com/about",
+                "https://hnq.vn/about",
             ],
             &[],
             &["stuff", "brian"]
@@ -467,7 +465,7 @@ mod legacy_check_match {
                 "adv$tag=stuff",
                 "somelongpath/test$tag=stuff",
                 "||brianbondy.com/$tag=brian",
-                "||huhisoft.com$tag=brian"
+                "||hnq.vn$tag=brian"
             ],
             FilterFormat::Standard,
             &[],
@@ -475,7 +473,7 @@ mod legacy_check_match {
                 "http://example.com/advert.html",
                 "http://example.com/somelongpath/test/2.html",
                 "https://brianbondy.com/about",
-                "https://huhisoft.com/about"
+                "https://hnq.vn/about"
             ],
             &["filtertag1", "filtertag2"]
         );

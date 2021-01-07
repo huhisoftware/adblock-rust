@@ -49864,10 +49864,10 @@
     "url": "http://www.notebookreview.com/wp-content/plugins/akismet/"
   },
   {
-    "filters": ["||analytics.huhisoft.com^"],
+    "filters": ["||analytics.hnq.vn^"],
     "sourceUrl": "https://",
     "type": "script",
-    "url": "https://analytics.huhisoft.com"
+    "url": "https://analytics.hnq.vn"
   },
   {
     "filters": ["||frtyj.com^"],

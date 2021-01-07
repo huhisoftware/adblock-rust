@@ -179,10 +179,8 @@ impl CosmeticFilterCache {
         let mut complex_selectors = vec![];
 
         classes.iter().for_each(|class| {
-            if self.simple_class_rules.contains(class) {
-                if !exceptions.contains(&format!(".{}", class)) {
-                    simple_classes.push(class);
-                }
+            if self.simple_class_rules.contains(class) && !exceptions.contains(&format!(".{}", class)) {
+                simple_classes.push(class);
             }
             if let Some(bucket) = self.complex_class_rules.get(class) {
                 complex_selectors.extend(bucket.iter().filter(|sel| {
@@ -191,10 +189,8 @@ impl CosmeticFilterCache {
             }
         });
         ids.iter().for_each(|id| {
-            if self.simple_id_rules.contains(id) {
-                if !exceptions.contains(&format!("#{}", id)) {
-                    simple_ids.push(id);
-                }
+            if self.simple_id_rules.contains(id) && !exceptions.contains(&format!("#{}", id)) {
+                simple_ids.push(id);
             }
             if let Some(bucket) = self.complex_id_rules.get(id) {
                 complex_selectors.extend(bucket.iter().filter(|sel| {
@@ -265,12 +261,22 @@ impl CosmeticFilterCache {
         }
     }
 
+    /// Sets the internal resources to be those provided, silently discarding errors.
+    ///
+    /// Use `add_resource` if error information is required.
     pub fn use_resources(&mut self, resources: &[Resource]) {
-        self.scriptlets = ScriptletResourceStorage::from_resources(resources);
+        let mut scriptlets = ScriptletResourceStorage::default();
+
+        resources.iter().for_each(|resource| {
+            let _result = scriptlets.add_resource(&resource);
+        });
+
+        self.scriptlets = scriptlets;
     }
 
-    pub fn add_resource(&mut self, resource: &Resource) {
-        self.scriptlets.add_resource(resource).unwrap_or_else(|e| eprintln!("Failed to add resource: {:?}", e));
+    /// Adds a single scriptlet resource.
+    pub fn add_resource(&mut self, resource: &Resource) -> Result<(), crate::resources::AddResourceError> {
+        self.scriptlets.add_resource(resource)
     }
 }
 
@@ -370,7 +376,7 @@ impl HostnameRuleDb {
         if let Some(bucket) = self.db.get_mut(hostname) {
             bucket.push(kind);
         } else {
-            self.db.insert(hostname.clone(), vec![kind]);
+            self.db.insert(*hostname, vec![kind]);
         }
     }
 

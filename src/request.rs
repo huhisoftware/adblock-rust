@@ -3,8 +3,6 @@
 use crate::url_parser;
 use crate::utils;
 
-use std::sync::{Arc, RwLock};
-
 #[derive(Clone, PartialEq, Debug)]
 pub enum RequestType {
     Beacon,
@@ -85,7 +83,6 @@ pub struct Request {
 
     // mutable fields, set later
     pub bug: Option<u32>,
-    fuzzy_signature: Arc<RwLock<Option<Vec<utils::Hash>>>>, // evaluated lazily
     hostname_end: usize
 }
 
@@ -99,21 +96,6 @@ impl<'a> Request {
 
     pub fn url_after_hostname(&self) -> &str {
         &self.url[self.hostname_end..]
-    }
-
-    pub fn get_fuzzy_signature(&self) -> Vec<utils::Hash> {
-        {
-            let signature_cache = self.fuzzy_signature.read().unwrap();
-            if signature_cache.is_some() {
-                return signature_cache.as_ref().unwrap().clone();
-            }
-        }
-        {
-            let mut signature_cache = self.fuzzy_signature.write().unwrap();
-            let signature = utils::create_fuzzy_signature(&self.url);
-            *signature_cache = Some(signature);
-        }
-        self.get_fuzzy_signature()
     }
 
     pub fn new(
@@ -139,7 +121,6 @@ impl<'a> Request {
             schema,
             hostname,
             source_hostname,
-            source_domain,
             third_party,
             hostname_end
         )
@@ -152,7 +133,6 @@ impl<'a> Request {
         schema: &str,
         hostname: &str,
         source_hostname: &str,
-        source_domain: &str,
         third_party: Option<bool>,
         hostname_end: usize
     ) -> Request {
@@ -186,9 +166,9 @@ impl<'a> Request {
             let mut hashes = Vec::with_capacity(4);
             hashes.push(utils::fast_hash(&source_hostname));
             for (i, c) in
-                source_hostname[..source_hostname.len() - source_domain.len()].char_indices()
+                source_hostname.char_indices()
             {
-                if c == '.' {
+                if c == '.' && i + 1 < source_hostname.len() {
                     hashes.push(utils::fast_hash(&source_hostname[i + 1..]));
                 }
             }
@@ -208,7 +188,6 @@ impl<'a> Request {
             is_https,
             is_supported,
             bug: None,
-            fuzzy_signature: Arc::new(RwLock::new(None)),
             hostname_end
         }
     }
@@ -234,7 +213,6 @@ impl<'a> Request {
                     parsed_url.schema(),
                     parsed_url.hostname(),
                     parsed_source.hostname(),
-                    source_domain,
                     third_party,
                     parsed_url.hostname_pos.1
                 ))
@@ -245,13 +223,12 @@ impl<'a> Request {
                     parsed_url.schema(),
                     parsed_url.hostname(),
                     "",
-                    "",
                     None,
                     parsed_url.hostname_pos.1
                 ))
             }
         } else {
-            return Err(RequestError::HostnameParseError);
+            Err(RequestError::HostnameParseError)
         }
     }
 
@@ -288,7 +265,6 @@ impl<'a> Request {
             &schema,
             &hostname,
             &source_hostname,
-            &source_domain,
             third_party,
             splitter + 2 + hostname.len()
         )
@@ -321,18 +297,8 @@ mod tests {
         assert_eq!(simple_example.is_third_party, Some(false));
         assert_eq!(simple_example.request_type, RequestType::Document);
         assert_eq!(
-            simple_example
-                .source_hostname_hashes
-                .as_ref()
-                .and_then(|h| h.last()),
-            Some(&utils::fast_hash("example.com"))
-        );
-        assert_eq!(
-            simple_example
-                .source_hostname_hashes
-                .as_ref()
-                .and_then(|h| h.first()),
-            Some(&utils::fast_hash("example.com"))
+            simple_example.source_hostname_hashes,
+            Some(vec![utils::fast_hash("example.com"), utils::fast_hash("com")]),
         );
 
         let unsupported_example = Request::new(
@@ -413,25 +379,6 @@ mod tests {
     }
 
     #[test]
-    fn get_fuzzy_signature_works() {
-        let simple_example = Request::new(
-            "document",
-            "https://example.com/ad",
-            "https",
-            "example.com",
-            "example.com",
-            "example.com",
-            "example.com",
-        );
-        let mut tokens = tokenize(&["ad", "https", "com", "example"], &[]);
-        tokens.sort_unstable();
-        assert_eq!(
-            simple_example.get_fuzzy_signature().as_slice(),
-            tokens.as_slice()
-        )
-    }
-
-    #[test]
     fn tokens_works() {
         let simple_example = Request::new(
             "document",
@@ -447,6 +394,7 @@ mod tests {
             tokenize(&[
                 "subdomain.example.com",
                 "example.com",
+                "com",
             ], &[])
             .as_slice()
         );
@@ -484,20 +432,10 @@ mod tests {
 
         // assert_eq!(parsed.source_domain, "example.com");
         assert_eq!(
-            parsed
-                .source_hostname_hashes
-                .as_ref()
-                .and_then(|h| h.first()),
-            Some(&utils::fast_hash("example.com"))
+            parsed.source_hostname_hashes,
+            Some(vec![utils::fast_hash("example.com"), utils::fast_hash("com")]),
         );
         // assert_eq!(parsed.source_hostname, "example.com");
-        assert_eq!(
-            parsed
-                .source_hostname_hashes
-                .as_ref()
-                .and_then(|h| h.last()),
-            Some(&utils::fast_hash("example.com"))
-        );
 
         let bad_url = Request::from_urls(
             "subdomain.example.com/ad",

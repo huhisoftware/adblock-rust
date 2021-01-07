@@ -74,8 +74,7 @@ impl Engine {
 
         let serialize_format = SerializeFormat::from((&self.blocker, &self.cosmetic_cache));
 
-        serialize_format.serialize().map_err(|e| {
-            eprintln!("Error serializing: {:?}", e);
+        serialize_format.serialize().map_err(|_e| {
             BlockerError::SerializationError
         })
     }
@@ -84,8 +83,7 @@ impl Engine {
     pub fn deserialize(&mut self, serialized: &[u8]) -> Result<(), BlockerError> {
         use crate::data_format::DeserializeFormat;
         let current_tags = self.blocker.tags_enabled();
-        let deserialize_format = DeserializeFormat::deserialize(serialized).map_err(|e| {
-            eprintln!("Error deserializing: {:?}", e);
+        let deserialize_format = DeserializeFormat::deserialize(serialized).map_err(|_e| {
             BlockerError::DeserializationError
         })?;
         let (blocker, cosmetic_cache) = deserialize_format.into();
@@ -105,7 +103,6 @@ impl Engine {
         .unwrap_or_else(|_e| {
             BlockerResult {
                 matched: false,
-                explicit_cancel: false,
                 important: false,
                 redirect: None,
                 exception: None,
@@ -149,8 +146,9 @@ impl Engine {
         let filter_parsed = NetworkFilter::parse(filter, false);
         match filter_parsed.map(|f| self.blocker.filter_exists(&f)) {
             Ok(exists) => exists,
-            Err(e) => {
-                eprintln!("Encountered unparseable filter when checking for filter existence: {:?}", e);
+            Err(_e) => {
+                #[cfg(test)]
+                eprintln!("Encountered unparseable filter when checking for filter existence: {:?}", _e);
                 false
             }
         }
@@ -195,9 +193,10 @@ impl Engine {
     }
 
     /// Sets this engine's resources to additionally include `resource`.
-    pub fn add_resource(&mut self, resource: Resource) {
-        self.blocker.add_resource(&resource);
-        self.cosmetic_cache.add_resource(&resource);
+    pub fn add_resource(&mut self, resource: Resource) -> Result<(), crate::resources::AddResourceError> {
+        self.blocker.add_resource(&resource)?;
+        self.cosmetic_cache.add_resource(&resource)?;
+        Ok(())
     }
 
     /// Gets a previously added resource from the engine.
@@ -497,7 +496,7 @@ mod tests {
             aliases: vec![],
             kind: ResourceType::Mime(MimeType::TextPlain),
             content: "".to_owned(),
-        });
+        }).unwrap();
 
         let url = "http://example.com/ad-banner.gif";
         let matched_rule = engine.check_network_urls(url, "", "");
@@ -507,12 +506,12 @@ mod tests {
 
     #[test]
     fn redirect_resource_lookup_works() {
-        let script = r#"
+        let script = base64::encode(r#"
 (function() {
 	;
 })();
 
-        "#;
+        "#);
 
         let mut engine = Engine::default();
 
@@ -521,12 +520,12 @@ mod tests {
             aliases: vec![],
             kind: ResourceType::Mime(MimeType::ApplicationJavascript),
             content: script.to_owned(),
-        });
+        }).unwrap();
         let inserted_resource = engine.get_resource("noopjs");
         assert!(inserted_resource.is_some());
         let resource = inserted_resource.unwrap();
         assert_eq!(resource.content_type, "application/javascript");
-        assert_eq!(&resource.data, script);
+        assert_eq!(resource.data, script);
     }
 
     #[test]
@@ -555,5 +554,26 @@ mod tests {
             assert_eq!(result.hide_selectors, expected_result.iter().map(|s| s.to_string()).collect::<HashSet<_>>());
             assert_eq!(result.generichide, expected_generichide);
         });
+    }
+
+    #[test]
+    fn important_redirect() {
+        let mut filter_set = FilterSet::new(true);
+        filter_set.add_filters(&vec![
+            "||addthis.com^$important,3p,domain=~missingkids.com|~missingkids.org|~sainsburys.jobs|~sitecore.com|~amd.com".to_string(),
+            "||addthis.com/*/addthis_widget.js$script,redirect=addthis.com/addthis_widget.js".to_string(),
+        ], FilterFormat::Standard);
+        let mut engine = Engine::from_filter_set(filter_set, false);
+
+        engine.add_resource(Resource {
+            name: "addthis.com/addthis_widget.js".to_owned(),
+            aliases: vec![],
+            kind: ResourceType::Mime(MimeType::ApplicationJavascript),
+            content: base64::encode("window.addthis = undefined"),
+        }).unwrap();
+
+        let result = engine.check_network_urls("https://s7.addthis.com/js/250/addthis_widget.js?pub=resto", "https://www.rhmodern.com/catalog/product/product.jsp?productId=prod14970086&categoryId=cat7150028", "script");
+
+        assert!(result.redirect.is_some());
     }
 }

@@ -158,6 +158,10 @@ impl FilterSet {
 
         other_rules.append(&mut ignore_previous_rules);
 
+        if rule_types.loads_network_rules() {
+            other_rules.push(content_blocking::ignore_previous_fp_documents());
+        }
+
         Ok((other_rules, filters_used))
     }
 }
@@ -256,7 +260,7 @@ pub fn parse_filter(
                 return Err(FilterParseError::Unsupported);
             }
             // Discard contents after first `#` character
-            let filter = if let Some(hash_loc) = filter.find("#") {
+            let filter = if let Some(hash_loc) = filter.find('#') {
                 let filter = &filter[..hash_loc];
                 let filter = filter.trim();
 

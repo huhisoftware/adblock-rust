@@ -1,6 +1,6 @@
 [package]
 name = "adblock-rs"
-version = "0.3.2"
+version = "0.3.3"
 authors = ["Huy Nguyen <huynq.cntt@gmail.com>", "Huynq <huynq@hnq.vn>"]
 edition = "2018"
 license = "MPL-2.0"
@@ -17,5 +17,5 @@ neon-build = "0.3.3"
 [dependencies]
 neon-serde = "0.3"
 serde =  { version = "1.0", features = ["derive", "rc"] }
-adblock = { path = "../", default-features = false, features = ["css-validation", "content-blocking", "embedded-domain-resolver"] }
+adblock = { path = "../", default-features = false, features = ["css-validation", "content-blocking", "embedded-domain-resolver", "resource-assembler"] }
 neon = "0.3.3"

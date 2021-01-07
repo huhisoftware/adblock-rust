@@ -119,8 +119,7 @@ impl Optimization for SimplePatternGroup {
         format!("{:b}:{:?}", filter.mask, filter.is_complete_regex())
     }
     fn select(&self, filter: &NetworkFilter) -> bool {
-        !filter.is_fuzzy()
-            && filter.opt_domains.is_none()
+        filter.opt_domains.is_none()
             && filter.opt_not_domains.is_none()
             && !filter.is_hostname_anchor()
             && !filter.is_redirect()
@@ -154,14 +153,14 @@ impl Optimization for UnionDomainGroup {
 
         if !domains.is_empty() {
             let mut domains = Vec::from_iter(domains.into_iter().cloned());
-            domains.sort();
+            domains.sort_unstable();
             let opt_domains_union = Some(domains.iter().fold(0, |acc, x| acc | x));
             filter.opt_domains = Some(domains);
             filter.opt_domains_union = opt_domains_union;
         }
         if !not_domains.is_empty() {
             let mut domains = Vec::from_iter(not_domains.into_iter().cloned());
-            domains.sort();
+            domains.sort_unstable();
             let opt_not_domains_union = Some(domains.iter().fold(0, |acc, x| acc | x));
             filter.opt_not_domains = Some(domains);
             filter.opt_not_domains_union = opt_not_domains_union;
@@ -185,8 +184,7 @@ impl Optimization for UnionDomainGroup {
     }
 
     fn select(&self, filter: &NetworkFilter) -> bool {
-        !filter.is_fuzzy()
-            && !filter.is_csp()
+        !filter.is_csp()
             && !filter.has_bug()
             && (filter.opt_domains.is_some() || filter.opt_not_domains.is_some())
     }

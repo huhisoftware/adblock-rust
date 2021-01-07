@@ -8,7 +8,30 @@ use once_cell::sync::Lazy;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 
+use std::collections::HashSet;
 use std::convert::{TryFrom, TryInto};
+
+/// By default, ABP rules do not block top-level document requests. There's no way to express that
+/// in content blocking format, so instead it's approximated with a rule that applies an exception
+/// to any first-party requests that are document types.
+///
+/// This rule should be added after all other network rules.
+pub fn ignore_previous_fp_documents() -> CbRule {
+    let mut resource_type = HashSet::new();
+    resource_type.insert(CbResourceType::Document);
+    CbRule {
+        trigger: CbTrigger {
+            url_filter: String::from(".*"),
+            resource_type: Some(resource_type),
+            load_type: vec![CbLoadType::FirstParty],
+            ..CbTrigger::default()
+        },
+        action: CbAction {
+            typ: CbType::IgnorePreviousRules,
+            selector: None,
+        },
+    }
+}
 
 /// Rust representation of a single content blocking rule.
 ///
@@ -94,7 +117,7 @@ pub struct CbTrigger {
     /// types. Valid values: document, image, style-sheet, script, font, raw (Any untyped load),
     /// svg-document, media, popup.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub resource_type: Option<std::collections::HashSet<CbResourceType>>,
+    pub resource_type: Option<HashSet<CbResourceType>>,
     /// An array of strings that can include one of two mutually exclusive values. If not
     /// specified, the rule matches all load types. first-party is triggered only if the resource
     /// has the same scheme, domain, and port as the main page resource. third-party is triggered
@@ -126,12 +149,8 @@ pub enum CbRuleCreationFailure {
     NoSupportedNetworkOptions(NetworkFilterMask),
     /// Network rules with redirect options cannot be represented in content blocking syntax.
     NetworkRedirectUnsupported,
-    /// Network rules with fuzzy matching options cannot be represented in content blocking syntax.
-    NetworkFuzzyMatchUnsupported,
     /// Network rules with generichide options cannot be supported in content blocking syntax.
     NetworkGenerichideUnsupported,
-    /// Network rules with explicitcancel options cannot be supported in content blocking syntax.
-    NetworkExplicitCancelUnsupported,
     /// Network rules with badfilter options cannot be supported in content blocking syntax.
     NetworkBadFilterUnsupported,
     /// Network rules with csp options cannot be supported in content blocking syntax.
@@ -221,14 +240,8 @@ impl TryFrom<NetworkFilter> for CbRuleEquivalent {
             if v.redirect.is_some() {
                 return Err(CbRuleCreationFailure::NetworkRedirectUnsupported);
             }
-            if v.mask.contains(NetworkFilterMask::FUZZY_MATCH) {
-                return Err(CbRuleCreationFailure::NetworkFuzzyMatchUnsupported);
-            }
             if v.mask.contains(NetworkFilterMask::GENERIC_HIDE) {
                 return Err(CbRuleCreationFailure::NetworkGenerichideUnsupported);
-            }
-            if v.mask.contains(NetworkFilterMask::EXPLICIT_CANCEL) {
-                return Err(CbRuleCreationFailure::NetworkExplicitCancelUnsupported);
             }
             if v.mask.contains(NetworkFilterMask::BAD_FILTER) {
                 return Err(CbRuleCreationFailure::NetworkBadFilterUnsupported);
@@ -354,7 +367,7 @@ impl TryFrom<NetworkFilter> for CbRuleEquivalent {
             let resource_type = if v.mask.contains(NetworkFilterMask::FROM_ANY) {
                 None
             } else {
-                let mut types = std::collections::HashSet::new();
+                let mut types = HashSet::new();
                 let mut unsupported_flags = NetworkFilterMask::empty();
 
                 macro_rules! push_if_flag {
@@ -421,7 +434,7 @@ impl TryFrom<NetworkFilter> for CbRuleEquivalent {
                         },
                         ..rule_clone
                     };
-                    let mut doc_type = std::collections::HashSet::new();
+                    let mut doc_type = HashSet::new();
                     doc_type.insert(CbResourceType::Document);
                     let just_doc_rule = CbRule {
                         trigger: CbTrigger {
@@ -1022,5 +1035,17 @@ mod ab2cb_tests {
                 ]
             }
         }]"####);
+    }
+
+    #[test]
+    fn test_ignore_previous_fp_documents() {
+        assert_eq!(vec![ignore_previous_fp_documents()], serde_json::from_str::<Vec<CbRule>>(r####"[{
+            "trigger":{
+                "url-filter":".*",
+                "resource-type":["document"],
+                "load-type":["first-party"]
+            },
+            "action":{"type":"ignore-previous-rules"}
+        }]"####).expect("content blocking rule under test could not be deserialized"));
     }
 }

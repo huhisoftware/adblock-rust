@@ -23,10 +23,6 @@ pub struct BlockerOptions {
 #[derive(Debug, Serialize)]
 pub struct BlockerResult {
     pub matched: bool,
-    /// Normally, Huhi Browser returns `200 OK` with an empty body when
-    /// `matched` is `true`, except if `explicit_cancel` is also `true`, in
-    /// which case the request is cancelled.
-    pub explicit_cancel: bool,
     /// Important is used to signal that a rule with the `important` option
     /// matched. An `important` match means that exceptions should not apply
     /// and no further checking is neccesary--the request should be blocked
@@ -63,7 +59,6 @@ impl Default for BlockerResult {
     fn default() -> BlockerResult {
         BlockerResult {
             matched: false,
-            explicit_cancel: false,
             important: false,
             redirect: None,
             exception: None,
@@ -181,16 +176,13 @@ impl Blocker {
             .importants
             .check(request, &request_tokens, &NO_TAGS);
 
+        let redirect_filter = self.redirects.check(request, &request_tokens, &NO_TAGS);
+
         // only check the rest of the rules if not previously matched
         let filter = if important_filter.is_none() && !matched_rule {
             #[cfg(feature = "metrics")]
             print!("tagged\t");
             self.filters_tagged.check(request, &request_tokens, &self.tags_enabled)
-                .or_else(|| {
-                    #[cfg(feature = "metrics")]
-                    print!("redirects\t");
-                    self.redirects.check(request, &request_tokens, &NO_TAGS)
-                })
                 .or_else(|| {
                     #[cfg(feature = "metrics")]
                     print!("filters\t");
@@ -202,7 +194,7 @@ impl Blocker {
 
         let exception = match filter.as_ref() {
             // if no other rule matches, only check exceptions if forced to
-            None if matched_rule || force_check_exceptions => {
+            None if matched_rule || force_check_exceptions || redirect_filter.is_some() => {
                 #[cfg(feature = "metrics")]
                 print!("exceptions\t");
                 self.exceptions.check(request, &request_tokens, &self.tags_enabled)
@@ -229,7 +221,7 @@ impl Blocker {
         println!();
 
         // only match redirects if we have them set up
-        let redirect: Option<String> = filter.as_ref().and_then(|f| {
+        let redirect: Option<String> = redirect_filter.as_ref().and_then(|f| {
             // Filter redirect option is set
             if let Some(redirect) = f.redirect.as_ref() {
                 // And we have a matching redirect resource
@@ -248,10 +240,9 @@ impl Blocker {
         });
 
         // If something has already matched before but we don't know what, still return a match
-        let matched = exception.is_none() && (filter.is_some() || matched_rule);
+        let matched = exception.is_none() && (filter.is_some() || redirect_filter.is_some() || matched_rule);
         BlockerResult {
             matched,
-            explicit_cancel: matched && filter.is_some() && filter.as_ref().map(|f| f.is_explicit_cancel()).unwrap_or_else(|| false),
             important: filter.is_some() && filter.as_ref().map(|f| f.is_important()).unwrap_or_else(|| false),
             redirect,
             exception: exception.as_ref().map(|f| f.to_string()), // copy the exception
@@ -452,8 +443,8 @@ impl Blocker {
         self.resources = resources;
     }
 
-    pub fn add_resource(&mut self, resource: &Resource) {
-        self.resources.add_resource(resource);
+    pub fn add_resource(&mut self, resource: &Resource) -> Result<(), crate::resources::AddResourceError> {
+        self.resources.add_resource(resource)
     }
 
     pub fn get_resource(&self, key: &str) -> Option<&RedirectResource> {
@@ -935,36 +926,6 @@ mod tests {
     }
 
     #[test]
-    fn network_filter_list_check_works_fuzzy_filter() {
-        let filters = vec![
-            "f$fuzzy",
-            "foo$fuzzy",
-            "foo/bar$fuzzy",
-            "foo bar$fuzzy",
-            "foo bar baz$fuzzy",
-            "coo car caz 42$fuzzy",
-        ];
-
-        let url_results = vec![
-            ("https://bar.com/f", true),
-            ("https://bar.com/foo", true),
-            ("https://bar.com/foo/baz", true),
-            ("http://bar.foo.baz", true),
-            ("http://car.coo.caz.43", false),
-        ];
-
-        let request_expectations: Vec<_> = url_results
-            .into_iter()
-            .map(|(url, expected_result)| {
-                let request = Request::from_url(url).unwrap();
-                (request, expected_result)
-            })
-            .collect();
-
-        test_requests_filters(&filters, &request_expectations);
-    }
-
-    #[test]
     fn network_filter_list_check_works_hostname_anchor() {
         let filters = vec![
             "||foo.com",
@@ -1100,6 +1061,38 @@ mod blocker_tests {
                 assert!(!matched_rule.matched, "Expected no match for {}, matched with {:?}", req.url, matched_rule.filter);
             }
         });
+    }
+
+    #[test]
+    fn redirect_exception() {
+        let filters = vec![
+            String::from("||imdb-video.media-imdb.com$media,redirect=noop-0.1s.mp3"),
+            String::from("@@||imdb-video.media-imdb.com^$domain=imdb.com"),
+        ];
+
+        let request = Request::from_urls("https://imdb-video.media-imdb.com/kBOeI88k1o23eNAi", "https://www.imdb.com/video/13", "media").unwrap();
+
+        let (network_filters, _) = parse_filters(&filters, true, FilterFormat::Standard);
+
+        let blocker_options: BlockerOptions = BlockerOptions {
+            enable_optimizations: false,
+        };
+
+        let mut blocker = Blocker::new(network_filters, &blocker_options);
+
+        blocker.add_resource(&Resource {
+            name: "noop-0.1s.mp3".to_string(),
+            aliases: vec![],
+            kind: crate::resources::ResourceType::Mime(crate::resources::MimeType::AudioMp3),
+            content: base64::encode("mp3"),
+        }).unwrap();
+
+        let matched_rule = blocker.check(&request);
+        assert_eq!(matched_rule.matched, false);
+        assert_eq!(matched_rule.important, false);
+        assert_eq!(matched_rule.redirect, Some("data:audio/mp3;base64,bXAz".to_string()));
+        assert_eq!(matched_rule.exception, Some("@@||imdb-video.media-imdb.com^$domain=imdb.com".to_string()));
+        assert_eq!(matched_rule.error, None);
     }
 
     #[test]

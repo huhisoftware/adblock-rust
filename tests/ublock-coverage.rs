@@ -6,7 +6,6 @@ use serde::Deserialize;
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::path::Path;
 use std::io::BufReader;
 
 #[allow(non_snake_case)]
@@ -80,8 +79,11 @@ fn check_specific_rules() {
         assert_eq!(checked.matched, true);
     }
 
+    #[cfg(feature = "resource-assembler")]
     {
-        // exceptions have not effect if important filter matches
+        use std::path::Path;
+
+        // exceptions have no effect if important filter matches
         let mut engine = Engine::from_rules_debug(
             &[
                 String::from("||cdn.taboola.com/libtrc/*/loader.js$script,redirect=noopjs,important,domain=cnet.com"),

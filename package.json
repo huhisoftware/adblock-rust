@@ -1,6 +1,6 @@
 {
   "name": "adblock-rs",
-  "version": "0.3.4",
+  "version": "0.3.3",
   "description": "Very fast, Rust-based, native implementation of ad-blocker engine for Node",
   "keywords": [
     "adblock",
@@ -16,7 +16,7 @@
   "main": "native/index.js",
   "author": "Huy Nguyen <huynq.cntt@gmail.com>",
   "contributors": [
-    "Huy Nguyen <huynq.cntt@gmail.com>"
+    "Huy Nguyen <huynq.cntt@gmail.com"
   ],
   "license": "MPL-2.0",
   "homepage": "https://github.com/huhisoftware/adblock-rust#readme",
